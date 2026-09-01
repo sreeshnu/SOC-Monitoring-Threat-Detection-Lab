@@ -8,8 +8,8 @@ For example:
 
 - Login attempts
 - User account changes
+- Remote logins
 - System changes
-- Application activity
 - Security events
 
 These records are called **Windows Event Logs**.
@@ -18,7 +18,7 @@ These records are called **Windows Event Logs**.
 
 The Windows machine is the system I want to monitor.
 
-If something suspicious happens but the event is never collected, Wazuh has nothing useful to analyse.
+If something happens but the event is never collected, Wazuh has nothing useful to analyse.
 
 So the flow starts here:
 
@@ -30,15 +30,17 @@ Windows records the event
 Wazuh Agent collects it
           ↓
 Wazuh Server receives it
+          ↓
+Wazuh checks the event
 ```
 
 ## Windows event channels
 
 Wazuh can collect Windows events through the Windows event channel.
 
-The Wazuh documentation says that the agent monitors the **System, Application, and Security** event channels by default. Other channels can be added when they are useful for a particular project. citeturn0search0turn0search8
+The current Wazuh documentation says that the agent monitors the **System, Application, and Security** event channels by default. Other channels can be added when they are needed. citeturn0search11
 
-For this project, the Security channel is especially useful because it contains many security-related events.
+For this project, the Security channel is especially useful because it contains many login and account-related events.
 
 ## Agent configuration file
 
@@ -48,11 +50,11 @@ On a typical 64-bit Windows installation, the Wazuh Agent configuration file is:
 C:\Program Files (x86)\ossec-agent\ossec.conf
 ```
 
-The Wazuh documentation uses this file for local Windows log-collection settings. citeturn0search0turn0search11
+The actual location can depend on the Windows installation. citeturn0search1
 
-## Example: monitoring a Windows event channel
+## Example: monitoring the Security channel
 
-A simple Wazuh configuration block looks like this:
+A basic configuration block is:
 
 ```xml
 <localfile>
@@ -83,19 +85,9 @@ If the right Windows events are not collected, detection becomes much harder.
 
 ## Collecting only specific events
 
-Wazuh can also use event queries when only certain events are needed.
+Wazuh can also use queries when only certain events are needed.
 
-For example, Wazuh documentation shows that an event channel can be filtered by event ID using a query such as:
-
-```xml
-<localfile>
-  <location>System</location>
-  <log_format>eventchannel</log_format>
-  <query>Event/System[EventID=7040]</query>
-</localfile>
-```
-
-The important idea is that Wazuh does not always have to collect everything. We can focus on events that are useful for a particular detection. citeturn0search0
+The exact query depends on the channel and the event you want to collect. This can reduce unnecessary data and focus the monitoring on events that matter to the use case. citeturn0search11
 
 ## Restart after configuration changes
 
@@ -105,7 +97,22 @@ After changing the agent configuration, restart the Wazuh Agent so the new confi
 Restart-Service -Name wazuh
 ```
 
-## What I learned from this part
+## Troubleshooting order
+
+If an expected alert does not appear, I check the problem from the beginning:
+
+1. Did the activity happen?
+2. Did Windows create an event?
+3. Is the correct event channel being collected?
+4. Is the Wazuh Agent running?
+5. Is the agent connected to the Wazuh server?
+6. Did Wazuh receive the event?
+7. Does a rule match the event?
+8. Was an alert created?
+
+This order helps separate a **log collection problem** from a **detection rule problem**.
+
+## What I learned
 
 A detection system is only as useful as the information it receives.
 
