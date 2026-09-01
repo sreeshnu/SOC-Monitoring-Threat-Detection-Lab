@@ -1,17 +1,20 @@
 <!--
-  Example custom Wazuh rule for Windows account-creation activity.
+  Custom Wazuh rule for Windows user account creation.
 
-  Important:
-  The exact Windows event fields can vary depending on the event data
-  collected by the Wazuh agent. Test the rule with the actual event from
-  the lab before using it.
+  Windows Security Event ID 4720 means a user account was created.
+  This is a lab rule. Test it with the actual event data from your
+  Wazuh installation before using it in another environment.
 -->
-
 <group name="windows,account_creation,custom,">
-  <rule id="100100" level="10">
+
+  <rule id="100100" level="8">
     <if_group>windows</if_group>
-    <field name="win.system.eventID">4720</field>
-    <description>Windows user account was created</description>
+    <field name="win.system.eventID">^4720$</field>
+    <description>Windows: A new user account was created.</description>
     <group>account_creation,windows,</group>
+    <mitre>
+      <id>T1136</id>
+    </mitre>
   </rule>
+
 </group>
