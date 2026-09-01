@@ -1,10 +1,8 @@
 # Wazuh Setup Guide
 
-## What is this file for?
+This page explains the setup in simple terms.
 
-This file explains the basic setup of the Wazuh part of the lab.
-
-The idea is simple:
+The idea is:
 
 ```text
 Windows
@@ -18,43 +16,62 @@ Rules
 Alerts
 ```
 
-The exact commands can change between Wazuh releases, so the official Wazuh installation guide should be used for the release being installed.
+The exact package version can change. When rebuilding the lab, use the current Wazuh documentation for that release.
 
-## 1. Prepare Ubuntu
+## 1. Prepare the Ubuntu machine
 
-Ubuntu is used as the machine that runs the Wazuh server.
+I used Ubuntu for the Wazuh central components.
 
-Before installing Wazuh, I made sure the Ubuntu virtual machine could communicate with the Windows machine on the lab network.
+Before installing Wazuh, the Ubuntu machine and Windows machine need to be able to communicate on the lab network.
 
 ### Why?
 
-The Windows agent needs a network path to the Wazuh server. If the two machines cannot communicate, the server cannot receive the agent's data.
+The Windows agent has to reach the Wazuh server. If the machines cannot communicate, the agent cannot send its data.
 
-## 2. Install the Wazuh server
+## 2. Install Wazuh
 
-The Wazuh server is the central part of the lab. It receives data from the monitored endpoint and processes it for detection.
+For a small lab, Wazuh provides an installation assistant that can install the central components on one host.
 
-For the current installation procedure, use the official Wazuh documentation:
+Current Wazuh quickstart example:
 
-https://documentation.wazuh.com/current/installation-guide/wazuh-server/step-by-step.html
+```bash
+curl -sO https://packages.wazuh.com/4.14/wazuh-install.sh
+sudo bash ./wazuh-install.sh -a
+```
+
+After the installation finishes, the installer shows the dashboard address and login information.
+
+### Why install the central components first?
+
+I need the central monitoring system ready before I connect the Windows machine. That way I can check the agent connection immediately after installing it.
 
 ## 3. Install the Wazuh Agent on Windows
 
-The Wazuh Agent is installed on the Windows machine that I want to monitor.
+The Wazuh Agent runs on the Windows machine that I want to monitor.
 
-The agent collects information from Windows and sends it to the Wazuh server.
+It collects information from Windows and sends it to the Wazuh server.
 
-The current Windows agent documentation uses the Wazuh manager address during deployment. The installer can also be configured with an agent name, group, and enrollment settings.
+A current Windows deployment can be done with the Wazuh MSI installer. Example:
 
-Official guide:
+```powershell
+msiexec.exe /i .\wazuh-agent-<version>-1.msi /q WAZUH_MANAGER="<WAZUH_SERVER_IP>"
+```
 
-https://documentation.wazuh.com/current/installation-guide/wazuh-agent/wazuh-agent-package-windows.html
+Replace the placeholders with the version and Wazuh server address used in the lab.
 
-## 4. Connect the agent to the server
+### Why is the agent needed?
 
-The important setting is the address of the Wazuh manager.
+The Wazuh server needs information from the endpoint. The agent is the part that collects the endpoint information and sends it to the server.
 
-A simplified example looks like this:
+## 4. Check the Windows agent configuration
+
+On a typical 64-bit Windows installation, the configuration file is:
+
+```text
+C:\Program Files (x86)\ossec-agent\ossec.conf
+```
+
+The manager address is configured inside the `<client>` section:
 
 ```xml
 <client>
@@ -64,52 +81,93 @@ A simplified example looks like this:
 </client>
 ```
 
-Replace `WAZUH_MANAGER_IP` with the address of the Wazuh server in the lab.
-
-The Windows agent configuration file is normally located at:
-
-```text
-C:\Program Files (x86)\ossec-agent\ossec.conf
-```
-
-The actual location can depend on the Windows installation architecture.
+Replace `WAZUH_MANAGER_IP` with the Ubuntu Wazuh server address.
 
 ## 5. Start or restart the agent
 
-After changing the configuration, the Wazuh Agent service needs to be started or restarted so the new settings are used.
+After installation or configuration changes, start or restart the service.
 
-PowerShell example:
+PowerShell:
+
+```powershell
+Start-Service wazuh
+```
+
+or:
 
 ```powershell
 Restart-Service -Name wazuh
 ```
 
-## 6. Check the connection
+Check the service:
 
-The next step is to check the Wazuh dashboard and confirm that the Windows agent is connected.
-
-I do not treat the installation as complete just because the software is installed.
-
-The real test is:
-
-```text
-Agent installed
-      ↓
-Agent connected
-      ↓
-Windows event generated
-      ↓
-Wazuh receives event
-      ↓
-Event appears in monitoring
+```powershell
+Get-Service wazuh
 ```
 
-## Why this setup matters
+### Why check the service?
 
-Installing Wazuh is only the first part.
+Installing the software does not automatically prove that monitoring is working. The service needs to be running before the agent can send information.
 
-For a SOC lab, the useful part is seeing information move from the endpoint to a central monitoring system and then using that information during an investigation.
+## 6. Check the agent in Wazuh
 
-## Note
+Open the Wazuh dashboard and check the agent list.
 
-The commands and paths in this document are examples for explaining the project. Always check the current Wazuh documentation before applying installation commands to a real system.
+The Windows endpoint should appear there after successful enrollment and connection.
+
+### Why check this before testing?
+
+If the agent is not connected, Windows may create an event but Wazuh will not receive it. That would make it impossible to tell whether a detection problem is caused by the rule or simply by missing data.
+
+## 7. Check Windows before blaming Wazuh
+
+When a test does not produce an alert, I use this order:
+
+```text
+Did the activity actually happen?
+          ↓
+Did Windows create an event?
+          ↓
+Did the Wazuh Agent collect it?
+          ↓
+Did the Wazuh Server receive it?
+          ↓
+Did a rule match it?
+          ↓
+Was an alert created?
+```
+
+This makes troubleshooting much easier.
+
+## 8. Common problems
+
+### Agent service is not running
+
+```powershell
+Get-Service wazuh
+```
+
+Start it if needed:
+
+```powershell
+Start-Service wazuh
+```
+
+### Agent is not connected
+
+Check:
+
+- The Wazuh server address in the agent configuration.
+- Network communication between Windows and Ubuntu.
+- The Wazuh services on Ubuntu.
+- The Windows agent service.
+
+### Windows event exists but Wazuh does not show it
+
+First check whether the event belongs to a log channel that the agent is collecting. Then check the agent configuration and agent logs.
+
+Only after confirming that the event reached Wazuh should I start changing detection rules.
+
+## Important note
+
+Do not put real passwords, private keys, or other secrets in this repository. Use placeholders such as `<WAZUH_SERVER_IP>` when documenting the lab.
